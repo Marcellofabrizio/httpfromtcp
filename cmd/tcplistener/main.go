@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"httpfromtcp/internal/request"
 	"io"
 	"log"
 	"net"
@@ -65,10 +66,12 @@ func main() {
 
 		log.Println("Connection accepted")
 
-		msgChannel := getLinesChannel(conn)
+		request, err := request.RequestFromReader(conn)
 
-		for line := range msgChannel {
-			fmt.Println(line)
-		}
+		fmt.Println("Request line:")
+		fmt.Printf("- Method: %s\n", request.RequestLine.Method)
+		fmt.Printf("- Target: %s\n", request.RequestLine.RequestTarget)
+		fmt.Printf("- Version: %s\n", request.RequestLine.HttpVersion)
+
 	}
 }

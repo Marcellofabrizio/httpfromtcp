@@ -8,8 +8,16 @@ import (
 	"unicode"
 )
 
+type RequestStatus int
+
+const (
+	Initialized RequestStatus = iota
+	Done
+)
+
 type Request struct {
 	RequestLine RequestLine
+	Status      RequestStatus
 }
 
 type RequestLine struct {
@@ -18,31 +26,92 @@ type RequestLine struct {
 	Method        string
 }
 
-func RequestFromReader(reader io.Reader) (*Request, error) {
+func (r *Request) parse(data []byte) (int, error) {
+	if r.Status == Initialized {
+		parsedLine, bytesConsumed, err := parseRequestLine(string(data))
 
-	msgChannel := getLinesChannel(reader)
+		if err != nil {
+			return -1, err
+		} else if bytesConsumed == 0 {
+			return 0, nil
+		}
 
-	requestLineContent := <-msgChannel
-
-	requestLine, err := parseRequestLine(requestLineContent)
-
-	if err != nil {
-		return nil, err
+		r.RequestLine = *parsedLine
+		r.Status = Done
+		return bytesConsumed, nil
 	}
 
+	if r.Status == Done {
+		return -1, errors.New("cannot read on complete state")
+	}
+
+	return -1, errors.New("unknown error")
+}
+
+const bufferSize = 8
+
+func RequestFromReader(reader io.Reader) (*Request, error) {
+
+	buf := make([]byte, bufferSize, bufferSize)
+	readToIndex := 0
+
 	request := Request{
-		RequestLine: *requestLine,
+		Status: Initialized,
+	}
+
+	for request.Status != Done {
+		bytesRead, err := reader.Read(buf[readToIndex:])
+
+		if readToIndex >= len(buf) {
+			newBuf := make([]byte, len(buf)*2)
+			copy(newBuf, buf)
+			buf = newBuf
+		}
+
+		if err != nil && err != io.EOF {
+			return nil, err
+		}
+
+		readToIndex += bytesRead
+
+		if readToIndex >= len(buf) {
+			newBuf := make([]byte, len(buf)*2)
+			copy(newBuf, buf)
+			buf = newBuf
+		}
+
+		parsed, perr := request.parse(buf[:readToIndex])
+		if perr != nil {
+			return nil, perr
+		}
+
+		if parsed > 0 {
+			copy(buf, buf[parsed:readToIndex])
+			readToIndex -= parsed
+		}
+
+		if err == io.EOF {
+			break
+		}
+
 	}
 
 	return &request, nil
 }
 
-func parseRequestLine(content string) (*RequestLine, error) {
+func parseRequestLine(content string) (*RequestLine, int, error) {
+	requestParts := strings.Split(content, "\r\n")
 
-	parts := strings.Split(content, " ")
+	if len(requestParts) <= 1 {
+		return nil, 0, nil
+	}
+
+	requestLineContent := requestParts[0]
+
+	parts := strings.Split(requestLineContent, " ")
 
 	if len(parts) != 3 {
-		return nil, errors.New("invalid request line size")
+		return nil, 0, errors.New("invalid request line size")
 	}
 
 	method, target, httpVersion := parts[0], parts[1], parts[2]
@@ -50,13 +119,13 @@ func parseRequestLine(content string) (*RequestLine, error) {
 	isMethodValid := validateMethod(method)
 
 	if !isMethodValid {
-		return nil, errors.New(fmt.Sprintf("invalid method %s", method))
+		return nil, 0, errors.New(fmt.Sprintf("invalid method %s", method))
 	}
 
 	isTargetValid := validateTarget(target)
 
 	if !isTargetValid {
-		return nil, errors.New(fmt.Sprintf("invalid target %s", target))
+		return nil, 0, errors.New(fmt.Sprintf("invalid target %s", target))
 	}
 
 	versionNumber := strings.Split(httpVersion, "/")[1]
@@ -64,7 +133,7 @@ func parseRequestLine(content string) (*RequestLine, error) {
 	isValidVersion := validateVersion(versionNumber)
 
 	if !isValidVersion {
-		return nil, errors.New(fmt.Sprintf("invalid version %s", httpVersion))
+		return nil, 0, errors.New(fmt.Sprintf("invalid version %s", httpVersion))
 	}
 
 	requestLine := RequestLine{
@@ -73,7 +142,7 @@ func parseRequestLine(content string) (*RequestLine, error) {
 		Method:        method,
 	}
 
-	return &requestLine, nil
+	return &requestLine, len(requestLineContent), nil
 }
 
 func validateMethod(s string) bool {
