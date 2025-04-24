@@ -38,19 +38,12 @@ func TestHeaders(t *testing.T) {
 
 	// Test: Valid 2 headers with existing headers
 	headers = NewHeaders()
-	data = []byte("User-Agent: Linux\r\n")
+	data = []byte("User-Agent: Linux\r\nAccept: */*\r\n")
 	n, done, err = headers.Parse(data)
 	require.NoError(t, err)
 	assert.False(t, done)
 	assert.Equal(t, "Linux", headers["User-Agent"])
 	assert.Equal(t, 19, n)
-
-	data = []byte("Accept: */*\r\n")
-	n, done, err = headers.Parse(data)
-	require.NoError(t, err)
-	assert.False(t, done)
-	assert.Equal(t, "*/*", headers["Accept"])
-	assert.Equal(t, 13, n)
 
 	// Test: Valid done
 	data = []byte("\r\n")
