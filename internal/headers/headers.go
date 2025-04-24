@@ -2,7 +2,6 @@ package headers
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 )
 
@@ -14,7 +13,10 @@ func NewHeaders() Headers {
 
 func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 
-	if !strings.HasSuffix(string(data), "\r\n") {
+	str := string(data)
+	delimiter := "\r\n"
+
+	if !strings.Contains(str, delimiter) {
 		return 0, false, nil
 	}
 
@@ -22,7 +24,11 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 		return len(data), true, nil
 	}
 
-	trimmedDataStr := strings.TrimSpace(string(data))
+	dIndex := strings.Index(str, delimiter)
+
+	headerStr := str[:dIndex+len(delimiter)]
+
+	trimmedDataStr := strings.TrimSpace(headerStr)
 
 	firstColonPos := strings.Index(trimmedDataStr, ":")
 
@@ -32,7 +38,11 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 
 	fieldName, fieldValue := trimmedDataStr[:firstColonPos], strings.TrimSpace(trimmedDataStr[firstColonPos+1:])
 
-	fmt.Printf("field-name: %s\nfield-value: %s\n", fieldName, fieldValue)
+	if strings.HasSuffix(fieldName, " ") {
+		return 0, false, errors.New("invalid field-name")
+	}
 
-	return 0, true, nil
+	h[fieldName] = fieldValue
+
+	return len(headerStr), false, nil
 }
