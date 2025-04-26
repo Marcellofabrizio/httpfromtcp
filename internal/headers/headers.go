@@ -2,6 +2,7 @@ package headers
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -38,11 +39,54 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 
 	fieldName, fieldValue := trimmedDataStr[:firstColonPos], strings.TrimSpace(trimmedDataStr[firstColonPos+1:])
 
-	if strings.HasSuffix(fieldName, " ") {
+	if !validateKey(fieldName) {
 		return 0, false, errors.New("invalid field-name")
 	}
 
+	fieldName = strings.ToLower(fieldName)
+
+	existingFieldValue, ok := h[fieldName]
+
+	if ok {
+		fieldValue = existingFieldValue + ", " + fieldValue
+	}
+
+	fmt.Printf("Setting %s: %s\n", fieldName, fieldValue)
 	h[fieldName] = fieldValue
 
 	return len(headerStr), false, nil
+}
+
+func validateKey(key string) bool {
+
+	if strings.HasSuffix(key, " ") {
+		return false
+	}
+
+	for _, char := range key {
+
+		switch {
+		case char >= 'a' && char <= 'z':
+			continue
+		case char >= 'A' && char <= 'Z':
+			continue
+		case char >= '0' && char <= '9':
+			continue
+		case isAllowedSpecialChar(char):
+			continue
+		default:
+			return false
+		}
+	}
+
+	return true
+}
+
+func isAllowedSpecialChar(ch rune) bool {
+	switch ch {
+	case '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~':
+		return true
+	default:
+		return false
+	}
 }

@@ -3,6 +3,7 @@ package request
 import (
 	"errors"
 	"fmt"
+	"httpfromtcp/internal/headers"
 	"io"
 	"strings"
 	"unicode"
@@ -13,11 +14,13 @@ type RequestStatus int
 const (
 	Initialized RequestStatus = iota
 	Done
+	ParsingHeaders
 )
 
 type Request struct {
 	RequestLine RequestLine
 	Status      RequestStatus
+	Headers     headers.Headers
 }
 
 type RequestLine struct {
@@ -27,6 +30,9 @@ type RequestLine struct {
 }
 
 func (r *Request) parse(data []byte) (int, error) {
+
+	totalBytesConsumed := 0
+
 	if r.Status == Initialized {
 		parsedLine, bytesConsumed, err := parseRequestLine(string(data))
 
@@ -37,8 +43,30 @@ func (r *Request) parse(data []byte) (int, error) {
 		}
 
 		r.RequestLine = *parsedLine
-		r.Status = Done
+		r.Status = ParsingHeaders
+		totalBytesConsumed = bytesConsumed
 		return bytesConsumed, nil
+	}
+
+	for r.Status != Done {
+		n, done, err := r.Headers.Parse(data[totalBytesConsumed:])
+
+		if err != nil {
+			return 0, err
+		}
+
+		if n == 0 {
+			return 0, nil
+		}
+
+		totalBytesConsumed += n
+
+		if !done {
+			return totalBytesConsumed, nil
+		} else {
+			r.Status = Done
+			return totalBytesConsumed, nil
+		}
 	}
 
 	if r.Status == Done {
@@ -56,7 +84,8 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	readToIndex := 0
 
 	request := Request{
-		Status: Initialized,
+		Status:  Initialized,
+		Headers: headers.NewHeaders(),
 	}
 
 	for request.Status != Done {
@@ -100,13 +129,15 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 }
 
 func parseRequestLine(content string) (*RequestLine, int, error) {
-	requestParts := strings.Split(content, "\r\n")
 
-	if len(requestParts) <= 1 {
+	delimiter := "\r\n"
+	if !strings.Contains(content, delimiter) {
 		return nil, 0, nil
 	}
 
-	requestLineContent := requestParts[0]
+	dIndex := strings.Index(content, delimiter)
+
+	requestLineContent := content[:dIndex+len(delimiter)]
 
 	parts := strings.Split(requestLineContent, " ")
 
@@ -128,7 +159,7 @@ func parseRequestLine(content string) (*RequestLine, int, error) {
 		return nil, 0, errors.New(fmt.Sprintf("invalid target %s", target))
 	}
 
-	versionNumber := strings.Split(httpVersion, "/")[1]
+	versionNumber := strings.TrimSpace(strings.Split(httpVersion, "/")[1])
 
 	isValidVersion := validateVersion(versionNumber)
 
