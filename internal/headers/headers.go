@@ -34,7 +34,7 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	firstColonPos := strings.Index(trimmedDataStr, ":")
 
 	if firstColonPos < 1 {
-		return 0, false, errors.New("missing field-name")
+		return 0, false, errors.New("malformed header")
 	}
 
 	fieldName, fieldValue := trimmedDataStr[:firstColonPos], strings.TrimSpace(trimmedDataStr[firstColonPos+1:])
