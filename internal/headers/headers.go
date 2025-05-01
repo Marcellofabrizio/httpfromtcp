@@ -2,7 +2,6 @@ package headers
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 )
 
@@ -10,6 +9,15 @@ type Headers map[string]string
 
 func NewHeaders() Headers {
 	return Headers{}
+}
+
+func (h Headers) Get(key string) (value string, ok bool) {
+
+	lowerStr := strings.ToLower(key)
+
+	existingValue, ok := h[lowerStr]
+
+	return existingValue, ok
 }
 
 func (h Headers) Parse(data []byte) (n int, done bool, err error) {
@@ -21,8 +29,8 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 		return 0, false, nil
 	}
 
-	if strings.HasPrefix(string(data), "\r\n") {
-		return len(data), true, nil
+	if strings.HasPrefix(string(data), delimiter) {
+		return len(delimiter), true, nil
 	}
 
 	dIndex := strings.Index(str, delimiter)
@@ -51,7 +59,6 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 		fieldValue = existingFieldValue + ", " + fieldValue
 	}
 
-	fmt.Printf("Setting %s: %s\n", fieldName, fieldValue)
 	h[fieldName] = fieldValue
 
 	return len(headerStr), false, nil

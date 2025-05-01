@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"httpfromtcp/internal/headers"
 	"io"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -13,8 +14,9 @@ type RequestStatus int
 
 const (
 	Initialized RequestStatus = iota
-	Done
 	ParsingHeaders
+	ParsingBody
+	Done
 )
 
 type Request struct {
@@ -50,24 +52,54 @@ func (r *Request) parse(data []byte) (int, error) {
 	}
 
 	for r.Status != Done {
-		n, done, err := r.Headers.Parse(data[totalBytesConsumed:])
+		switch r.Status {
+		case ParsingHeaders:
+			n, done, err := r.Headers.Parse(data[totalBytesConsumed:])
 
-		if err != nil {
-			return 0, err
-		}
+			if err != nil {
+				return 0, err
+			}
 
-		if n == 0 {
-			return 0, nil
-		}
+			if n == 0 {
+				return 0, nil
+			}
 
-		totalBytesConsumed += n
-
-		if !done {
+			if done {
+				r.Status = ParsingBody
+			}
+			totalBytesConsumed += n
 			return totalBytesConsumed, nil
-		} else {
-			r.Status = Done
+		case ParsingBody:
+			remaining := data[totalBytesConsumed:]
+			value, ok := r.Headers.Get("Content-Length")
+			if !ok {
+				r.Status = Done
+				return totalBytesConsumed, nil
+			}
+
+			contentLength, err := strconv.Atoi(value)
+			if err != nil {
+				return 0, errors.New("invalid content-length")
+			}
+
+			if len(remaining) == 0 {
+				return 0, nil
+			}
+
+			r.Body = append(r.Body, remaining...)
+			totalBytesConsumed += len(remaining)
+
+			if len(r.Body) > contentLength {
+				return 0, errors.New(fmt.Sprintf("body exceeds content-length. Expected size %d, got %d", contentLength, len(r.Body)))
+			}
+
+			if len(r.Body) == contentLength {
+				r.Status = Done
+			}
+
 			return totalBytesConsumed, nil
 		}
+
 	}
 
 	if r.Status == Done {
@@ -80,8 +112,7 @@ func (r *Request) parse(data []byte) (int, error) {
 const bufferSize = 8
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
-
-	buf := make([]byte, bufferSize, bufferSize)
+	buf := make([]byte, bufferSize)
 	readToIndex := 0
 
 	request := Request{
@@ -90,7 +121,18 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	}
 
 	for request.Status != Done {
-		bytesRead, err := reader.Read(buf[readToIndex:])
+		if readToIndex > 0 {
+			parsed, perr := request.parse(buf[:readToIndex])
+			if perr != nil {
+				return nil, perr
+			}
+
+			if parsed > 0 {
+				copy(buf, buf[parsed:readToIndex])
+				readToIndex -= parsed
+				continue
+			}
+		}
 
 		if readToIndex >= len(buf) {
 			newBuf := make([]byte, len(buf)*2)
@@ -98,32 +140,23 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 			buf = newBuf
 		}
 
+		bytesRead, err := reader.Read(buf[readToIndex:])
 		if err != nil && err != io.EOF {
 			return nil, err
 		}
 
+		if bytesRead == 0 {
+			if err == io.EOF {
+				break
+			}
+			continue
+		}
+
 		readToIndex += bytesRead
+	}
 
-		if readToIndex >= len(buf) {
-			newBuf := make([]byte, len(buf)*2)
-			copy(newBuf, buf)
-			buf = newBuf
-		}
-
-		parsed, perr := request.parse(buf[:readToIndex])
-		if perr != nil {
-			return nil, perr
-		}
-
-		if parsed > 0 {
-			copy(buf, buf[parsed:readToIndex])
-			readToIndex -= parsed
-		}
-
-		if err == io.EOF {
-			break
-		}
-
+	if request.Status != Done {
+		return nil, errors.New("incomplete request")
 	}
 
 	return &request, nil
