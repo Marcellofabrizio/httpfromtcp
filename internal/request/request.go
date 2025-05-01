@@ -67,6 +67,7 @@ func (r *Request) parse(data []byte) (int, error) {
 			if done {
 				r.Status = ParsingBody
 			}
+
 			totalBytesConsumed += n
 			return totalBytesConsumed, nil
 		case ParsingBody:
@@ -155,8 +156,8 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		readToIndex += bytesRead
 	}
 
-	if request.Status != Done {
-		return nil, errors.New("incomplete request")
+	if request.Body != nil && request.Status != Done {
+		return nil, errors.New("incomplete body")
 	}
 
 	return &request, nil
