@@ -21,7 +21,6 @@ func (h Headers) Get(key string) (value string, ok bool) {
 }
 
 func (h Headers) Parse(data []byte) (n int, done bool, err error) {
-
 	str := string(data)
 	delimiter := "\r\n"
 

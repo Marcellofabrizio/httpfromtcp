@@ -64,11 +64,13 @@ func (r *Request) parse(data []byte) (int, error) {
 				return 0, nil
 			}
 
+			totalBytesConsumed += n
+
 			if done {
 				r.Status = ParsingBody
+				continue
 			}
 
-			totalBytesConsumed += n
 			return totalBytesConsumed, nil
 		case ParsingBody:
 			remaining := data[totalBytesConsumed:]
