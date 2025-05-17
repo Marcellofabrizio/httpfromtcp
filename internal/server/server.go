@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"httpfromtcp/internal/request"
+	"httpfromtcp/internal/response"
 	"log"
 	"net"
 	"strconv"
@@ -71,19 +72,21 @@ func (s *Server) handle(conn net.Conn) {
 		return
 	}
 
-	body := "Hello World!\n"
-	response := fmt.Sprintf(
-		"HTTP/1.1 200 OK\r\n"+
-			"Content-Type: text/plain\r\n"+
-			"Content-Length: %d\r\n"+
-			"Connection: close\r\n"+
-			"\r\n"+
-			"%s",
-		len(body), body,
-	)
+	err = response.WriteStatusLine(conn, 200)
 
-	_, err = conn.Write([]byte(response))
 	if err != nil {
-		log.Printf("Failed to write response: %v\n", err)
+		log.Printf("failed to write status line: %v\n", err)
+	}
+
+	headers := response.GetDefaultHeaders(0)
+
+	err = response.WriteHeaders(conn, headers)
+
+	for k, v := range headers {
+		fmt.Printf("%s: %s\n", k, v)
+	}
+
+	if err != nil {
+		log.Printf("failed to write response: %v\n", err)
 	}
 }
