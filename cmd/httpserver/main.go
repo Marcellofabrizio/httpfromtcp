@@ -25,8 +25,8 @@ func main() {
 			}
 		} else if req.RequestLine.RequestTarget == "/myproblem" {
 			return &server.HandlerError{
-				Message:    "Your problem is not my problem\n",
-				StatusCode: response.StatusBadRequest,
+				Message:    "My problem is not your problem\n",
+				StatusCode: response.StatusInternalServerError,
 			}
 		} else {
 			w.Write([]byte("All good, frfr\n"))
