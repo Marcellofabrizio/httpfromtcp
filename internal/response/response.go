@@ -1,9 +1,9 @@
 package response
 
 import (
+	"bytes"
 	"fmt"
 	"httpfromtcp/internal/headers"
-	"io"
 )
 
 type StatusCode int
@@ -15,23 +15,23 @@ const (
 )
 
 type Writer struct {
-	ioWriter io.Writer
+	Buffer *bytes.Buffer
 }
 
 func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
 	httpVersion := "HTTP/1.1"
 	switch statusCode {
 	case StatusOK:
-		_, err := w.ioWriter.Write([]byte(fmt.Sprintf("%s %d %s\r\n", httpVersion, StatusOK, "OK")))
+		_, err := w.Buffer.Write([]byte(fmt.Sprintf("%s %d %s\r\n", httpVersion, StatusOK, "OK")))
 		return err
 	case StatusBadRequest:
-		_, err := w.ioWriter.Write([]byte(fmt.Sprintf("%s %d %s\r\n", httpVersion, StatusBadRequest, "Bad Request")))
+		_, err := w.Buffer.Write([]byte(fmt.Sprintf("%s %d %s\r\n", httpVersion, StatusBadRequest, "Bad Request")))
 		return err
 	case StatusInternalServerError:
-		_, err := w.ioWriter.Write([]byte(fmt.Sprintf("%s %d %s\r\n", httpVersion, StatusInternalServerError, "Internal Server Error")))
+		_, err := w.Buffer.Write([]byte(fmt.Sprintf("%s %d %s\r\n", httpVersion, StatusInternalServerError, "Internal Server Error")))
 		return err
 	default:
-		_, err := w.ioWriter.Write([]byte(fmt.Sprintf("%s %d\r\n", httpVersion, statusCode)))
+		_, err := w.Buffer.Write([]byte(fmt.Sprintf("%s %d\r\n", httpVersion, statusCode)))
 		return err
 	}
 }
@@ -39,12 +39,12 @@ func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
 func (w *Writer) WriteHeaders(headers headers.Headers) error {
 
 	for k, v := range headers {
-		_, err := w.ioWriter.Write([]byte(fmt.Sprintf("%s: %s\r\n", k, v)))
+		_, err := w.Buffer.Write([]byte(fmt.Sprintf("%s: %s\r\n", k, v)))
 		if err != nil {
 			return err
 		}
 	}
-	_, err := w.ioWriter.Write([]byte("\r\n"))
+	_, err := w.Buffer.Write([]byte("\r\n"))
 
 	if err != nil {
 		return err
@@ -54,14 +54,14 @@ func (w *Writer) WriteHeaders(headers headers.Headers) error {
 }
 
 func (w *Writer) WriteBody(p []byte) (int, error) {
-	return w.ioWriter.Write(p)
+	return w.Buffer.Write(p)
 }
 
-func GetDefaultHeaders(contentLen int) headers.Headers {
+func GetDefaultHeaders(contentLen int, contentType string) headers.Headers {
 	headers := headers.NewHeaders()
 	headers.Parse([]byte(fmt.Sprintf("Content-Length: %d\r\n", contentLen)))
 	headers.Parse([]byte("Connection: close\r\n"))
-	headers.Parse([]byte("Content-Type: text/plain\r\n"))
+	headers.Parse([]byte(fmt.Sprintf("Content-Type: %s\r\n", contentType)))
 
 	return headers
 }

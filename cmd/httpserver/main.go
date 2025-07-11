@@ -4,7 +4,6 @@ import (
 	"httpfromtcp/internal/request"
 	"httpfromtcp/internal/response"
 	"httpfromtcp/internal/server"
-	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -15,12 +14,20 @@ const port = 42069
 
 func main() {
 
-	server, err := server.Serve(port, func(w io.Writer, req *request.Request) *server.HandlerError {
+	server, err := server.Serve(port, func(w *response.Writer, req *request.Request) *server.HandlerError {
 
 		log.Println(req.RequestLine.RequestTarget)
 		if req.RequestLine.RequestTarget == "/yourproblem" {
 			return &server.HandlerError{
-				Message:    "Your problem is not my problem\n",
+				Message: `<html>
+  <head>
+    <title>400 Bad Request</title>
+  </head>
+  <body>
+    <h1>Bad Request</h1>
+    <p>Your request honestly kinda sucked.</p>
+  </body>
+</html>`,
 				StatusCode: response.StatusBadRequest,
 			}
 		} else if req.RequestLine.RequestTarget == "/myproblem" {
@@ -29,7 +36,11 @@ func main() {
 				StatusCode: response.StatusInternalServerError,
 			}
 		} else {
-			w.Write([]byte("All good, frfr\n"))
+			w.WriteStatusLine(response.StatusOK)
+			body := []byte("All good, frfr")
+			headers := response.GetDefaultHeaders(len(body), "text/html")
+			w.WriteHeaders(headers)
+			w.WriteBody(body)
 		}
 
 		return nil

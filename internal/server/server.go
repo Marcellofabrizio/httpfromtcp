@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"httpfromtcp/internal/request"
 	"httpfromtcp/internal/response"
-	"io"
 	"log"
 	"net"
 	"strconv"
@@ -16,24 +15,25 @@ type HandlerError struct {
 	StatusCode response.StatusCode
 }
 
-func (hErr *HandlerError) Write(w io.Writer) error {
-	body := []byte(hErr.Message)
-	err := response.WriteStatusLine(w, hErr.StatusCode)
+func (hErr *HandlerError) Write(w response.Writer) error {
+	err := w.WriteStatusLine(hErr.StatusCode)
 
 	if err != nil {
 		return err
 	}
 
-	headers := response.GetDefaultHeaders(len(body))
-	if err := response.WriteHeaders(w, headers); err != nil {
+	body := []byte(hErr.Message)
+
+	headers := response.GetDefaultHeaders(len(body), "text/html")
+	if err := w.WriteHeaders(headers); err != nil {
 		return err
 	}
 
-	_, err = w.Write(body)
+	_, err = w.WriteBody(body)
 	return err
 }
 
-type Handler func(w io.Writer, req *request.Request) *HandlerError
+type Handler func(w *response.Writer, req *request.Request) *HandlerError
 
 type Server struct {
 	Port     string
@@ -89,32 +89,28 @@ func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
 	req, err := request.RequestFromReader(conn)
 
+	buf := bytes.NewBuffer([]byte{})
+	writer := &response.Writer{
+		Buffer: buf,
+	}
+
 	if err != nil {
 		hErr := &HandlerError{
 			StatusCode: response.StatusBadRequest,
 			Message:    err.Error(),
 		}
-		hErr.Write(conn)
+		hErr.Write(*writer)
+		conn.Write(writer.Buffer.Bytes())
 		return
 	}
 
-	buf := bytes.NewBuffer([]byte{})
-	hErr := s.handler(buf, req)
+	hErr := s.handler(writer, req)
 
 	if hErr != nil {
-		hErr.Write(conn)
+		hErr.Write(*writer)
+		conn.Write(writer.Buffer.Bytes())
 		return
 	}
 
-	b := buf.Bytes()
-	response.WriteStatusLine(conn, response.StatusOK)
-	headers := response.GetDefaultHeaders(len(b))
-
-	err = response.WriteHeaders(conn, headers)
-
-	if err != nil {
-		log.Printf("failed to write response: %v\n", err)
-	}
-
-	conn.Write(b)
+	conn.Write(writer.Buffer.Bytes())
 }
