@@ -1,41 +1,57 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
 	"httpfromtcp/internal/request"
 	"httpfromtcp/internal/response"
+	"io"
 	"log"
 	"net"
 	"strconv"
 	"sync/atomic"
 )
 
+type HandlerError struct {
+	Message    string
+	StatusCode response.StatusCode
+}
+
+func (hErr *HandlerError) Write(w io.Writer) error {
+	_, err := w.Write([]byte(fmt.Sprintf("%s %d\r\n", hErr.Message, hErr.StatusCode)))
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+type Handler func(w io.Writer, req *request.Request) *HandlerError
+
 type Server struct {
 	Port     string
+	handler  Handler
 	listener net.Listener
 	closed   atomic.Bool
 }
 
-func Serve(port int) (*Server, error) {
+func Serve(port int, handler Handler) (*Server, error) {
 
-	log.Println(port)
 	portStr := ":" + strconv.Itoa(port)
 	l, err := net.Listen("tcp", portStr)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
 
-	server := Server{
+	server := &Server{
 		Port:     portStr,
 		listener: l,
+		handler:  handler,
 	}
 
-	go func() {
-		defer server.Close()
-		server.listen()
-	}()
-
-	return nil, nil
+	go server.listen()
+	return server, nil
 
 }
 
@@ -64,29 +80,35 @@ func (s *Server) listen() {
 }
 
 func (s *Server) handle(conn net.Conn) {
-	_, err := request.RequestFromReader(conn)
+	defer s.Close()
+	req, err := request.RequestFromReader(conn)
 
 	if err != nil {
-		log.Printf("Failed to parse request: %v\n", err)
-		conn.Close()
+		hErr := &HandlerError{
+			StatusCode: response.StatusBadRequest,
+			Message:    err.Error(),
+		}
+		hErr.Write(conn)
 		return
 	}
 
-	err = response.WriteStatusLine(conn, 200)
+	buf := bytes.NewBuffer([]byte{})
+	hErr := s.handler(buf, req)
 
-	if err != nil {
-		log.Printf("failed to write status line: %v\n", err)
+	if hErr != nil {
+		hErr.Write(conn)
+		return
 	}
 
-	headers := response.GetDefaultHeaders(0)
+	b := buf.Bytes()
+	response.WriteStatusLine(conn, response.StatusOK)
+	headers := response.GetDefaultHeaders(len(b))
 
 	err = response.WriteHeaders(conn, headers)
-
-	for k, v := range headers {
-		fmt.Printf("%s: %s\n", k, v)
-	}
 
 	if err != nil {
 		log.Printf("failed to write response: %v\n", err)
 	}
+
+	conn.Write(b)
 }
