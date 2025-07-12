@@ -19,7 +19,8 @@ func main() {
 		log.Println(req.RequestLine.RequestTarget)
 		if req.RequestLine.RequestTarget == "/yourproblem" {
 			return &server.HandlerError{
-				Message: `<html>
+				Message: `
+<html>
   <head>
     <title>400 Bad Request</title>
   </head>
@@ -28,17 +29,39 @@ func main() {
     <p>Your request honestly kinda sucked.</p>
   </body>
 </html>`,
-				StatusCode: response.StatusBadRequest,
+				ContentType: "text/html",
+				StatusCode:  response.StatusBadRequest,
 			}
 		} else if req.RequestLine.RequestTarget == "/myproblem" {
 			return &server.HandlerError{
-				Message:    "My problem is not your problem\n",
-				StatusCode: response.StatusInternalServerError,
+				Message: `
+<html>
+  <head>
+    <title>500 Internal Server Error</title>
+  </head>
+  <body>
+    <h1>Internal Server Error</h1>
+    <p>Okay, you know what? This one is on me.</p>
+  </body>
+</html>
+				`,
+				ContentType: "text/html",
+				StatusCode:  response.StatusInternalServerError,
 			}
 		} else {
 			w.WriteStatusLine(response.StatusOK)
-			body := []byte("All good, frfr")
-			headers := response.GetDefaultHeaders(len(body), "text/html")
+			body := []byte(`
+<html>
+  <head>
+    <title>200 OK</title>
+  </head>
+  <body>
+    <h1>Success!</h1>
+    <p>Your request was an absolute banger.</p>
+  </body>
+</html>`)
+			headers := response.GetDefaultHeaders(len(body))
+			headers.Override("Content-Type", "text/html")
 			w.WriteHeaders(headers)
 			w.WriteBody(body)
 		}

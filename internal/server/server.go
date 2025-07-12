@@ -11,8 +11,9 @@ import (
 )
 
 type HandlerError struct {
-	Message    string
-	StatusCode response.StatusCode
+	Message     string
+	ContentType string
+	StatusCode  response.StatusCode
 }
 
 func (hErr *HandlerError) Write(w response.Writer) error {
@@ -24,7 +25,8 @@ func (hErr *HandlerError) Write(w response.Writer) error {
 
 	body := []byte(hErr.Message)
 
-	headers := response.GetDefaultHeaders(len(body), "text/html")
+	headers := response.GetDefaultHeaders(len(body))
+	headers.Override("Content-Type", hErr.ContentType)
 	if err := w.WriteHeaders(headers); err != nil {
 		return err
 	}

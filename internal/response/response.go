@@ -57,11 +57,11 @@ func (w *Writer) WriteBody(p []byte) (int, error) {
 	return w.Buffer.Write(p)
 }
 
-func GetDefaultHeaders(contentLen int, contentType string) headers.Headers {
+func GetDefaultHeaders(contentLen int) headers.Headers {
 	headers := headers.NewHeaders()
 	headers.Parse([]byte(fmt.Sprintf("Content-Length: %d\r\n", contentLen)))
 	headers.Parse([]byte("Connection: close\r\n"))
-	headers.Parse([]byte(fmt.Sprintf("Content-Type: %s\r\n", contentType)))
+	headers.Parse([]byte("Content-Type: text/plain\r\n"))
 
 	return headers
 }

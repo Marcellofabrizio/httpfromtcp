@@ -2,6 +2,7 @@ package headers
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -61,6 +62,16 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	h[fieldName] = fieldValue
 
 	return len(headerStr), false, nil
+}
+
+func (h Headers) Override(key string, value string) {
+
+	_, exists := h.Get(key)
+
+	if exists {
+		h.Parse([]byte(fmt.Sprintf("%s: %s\r\n", key, value)))
+	}
+
 }
 
 func validateKey(key string) bool {
